@@ -260,8 +260,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: 'allowance',
-        args: [address, contractAddress],
-        chainId: baseSepolia.id
+        args: [address, contractAddress]
       }) as bigint
 
       console.log(`ApproveToken: Current allowance: ${allowance}, Required: ${amount}`)
