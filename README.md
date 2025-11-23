@@ -1,165 +1,127 @@
-# Stark Overflow
+# StarkOverflow EVM
 
-**Stark Overflow** is a decentralized application (dApp) inspired by the concept of Stack Overflow, but with a financial incentive system. Using Starknet technology, this project allows users to ask questions and offer cryptocurrency rewards for the best answers.
+A decentralized Q&A platform built on EVM with Filecoin perpetual storage via Lighthouse SDK.
 
-## 🚀 Features
+## 🌟 Features
 
-- Gamified question-and-answer system.
-- Cryptocurrency deposits linked to each question.
-- Additional contributions from other users to increase the reward.
-- Automatic payment for the answer selected as the solution.
-- Frontend built with **React** and **Typescript**.
-- Smart Contracts written in **Cairo** for execution on Starknet.
+- **EVM Smart Contracts**: Built on Base Sepolia testnet
+- **Filecoin Storage**: Perpetual storage of all questions and answers via Lighthouse SDK
+- **IPFS Integration**: Content addressed by CID, stored on-chain
+- **Wallet Integration**: Privy + Wagmi for seamless authentication
+- **Token Staking**: Stake tokens on questions to incentivize quality answers
+- **Forum System**: Organized Q&A by topics
 
-## 📂 Project Structure
+## 🔗 Filecoin Integration
 
-```
-/stark_overflow
-│
-├── frontend/                                 # User interfaces
-│   |── landing/                              # Landing page of the app
-|   |
-│   └── react/                                # The frontend of the app made in React
-│       |── src/
-│       |   |── @types
-│       |   |── assets/                       # Images and icons
-│       |   |── components/                   # Reusable components
-│       |   |── hooks/                        # Custom hooks
-│       |   |   |── useStatusMessage.ts       # Hook for managing status messages
-│       |   |   └── useWallet.ts              # Hook for managing wallet connection
-│       |   |── pages/                        # Main pages of the app
-│       |   |   |── Home/                     # Main page of the app
-│       |   |   |── Forum/                    # Page for viewing app's forums
-│       |   |   |── QuestionPage/             # Page for asking a question
-|       |   |   └── AnswerPage/               # Page for viewing answers to a question and give a new answer
-│       |   |── providers/                    # General context providers for state management
-│       |   |── services/                     # API services
-│       |   |── styles/                       # Global styles and themes
-│       |   └── utils/                        # Utility functions
-│       |── App.tsx                           # Main application component
-│       |── main.tsx                          # Entry point of the React app
-|       └── router.tsx                        # Routes of the app
-|
-├── smartcontract/                            # Smart contracts written in Cairo
-│   ├── src/                                  # Contract source code
-│   │   ├── events.cairo                      # Event definitions
-│   │   ├── lib.cairo                         # Entrypoint of the smart contract
-│   │   ├── StarkOverflow.cairo               # Main contract logic
-│   │   ├── structs.cairo                     # Struct definitions
-│   │   |── types.cairo                       # Type definitions
-│   |   └── tests/                            # Contract tests
-│   │       ├── common.cairo                  # Common test functions
-|   |       └── StarkOverflowTest.cairo       # Test cases for the main contract
-│   └── Scarb.toml                            # Scarb project configuration
-│
-└── README.md                                 # General project documentation
+This project makes **significant use of Filecoin** through:
+
+- **Perpetual Storage**: All question descriptions and answer content are uploaded to Filecoin via Lighthouse SDK
+- **CID-Based Addressing**: Content identifiers (CIDs) are stored on-chain in the EVM smart contract
+- **Automatic Upload**: Questions and answers are automatically uploaded to Filecoin before blockchain transaction
+- **Content Retrieval**: CIDs are converted to IPFS gateway URLs for content display
+- **Storage Statistics**: Track total files and storage used on Filecoin
+
+### Lighthouse SDK Functions
+
+```typescript
+// Upload text to Filecoin
+const cid = await uploadText(content, filename)
+
+// Upload images to Filecoin
+const cid = await uploadImage(file)
+
+// Get Filecoin storage status
+const status = await getFilecoinStatus(cid)
+
+// Get total storage statistics
+const stats = await getStorageStats()
 ```
 
-## ⚙️ Installation
+## 🚀 Tech Stack
 
-### Prerequisites
+### Frontend
+- **React** + TypeScript + Vite
+- **Wagmi** + **Viem** for EVM interactions
+- **Privy** for wallet authentication
+- **Lighthouse SDK** for Filecoin storage
+- **Styled Components** for styling
 
-- [Node.js](https://nodejs.org/) v16+
-- [Yarn](https://yarnpkg.com/) or [npm](https://www.npmjs.com/)
-- [Scarb](https://docs.swmansion.com/scarb/) (for working with Cairo contracts)
-- [Starknet CLI](https://book.starknet.io/)
+### Smart Contracts
+- **Solidity** smart contracts
+- **Base Sepolia** testnet
+- **Hardhat** for development
 
-### 1. Clone the repository
+## 📦 Installation
+
 ```bash
- git clone https://github.com/your-username/stark-overflow.git
- cd stark-overflow
-```
-
-### 2. Frontend Setup
-```bash
-cd frontend
+# Install dependencies
+cd frontend/react
 npm install
-# or
-yarn install
+
+# Configure environment variables
+cp .env.example .env
+# Add your keys:
+# - VITE_CONTRACT_ADDRESS
+# - VITE_LIGHTHOUSE_API_KEY
+# - VITE_PRIVY_APP_ID
 ```
 
-### 3. Smart Contracts Setup
+## 🔑 Getting Lighthouse API Key
+
+1. Visit https://files.lighthouse.storage/
+2. Connect your wallet
+3. Go to **API Key** → **Create New Key**
+4. Copy the key and add to `.env` as `VITE_LIGHTHOUSE_API_KEY`
+
+## 🏃 Running
+
 ```bash
-cd smartcontract
-scarb build
+# Development
+npm run dev
+
+# Build
+npm run build
 ```
 
-## 🔍 How to Use
+## 📝 Environment Variables
 
-### Starting the Frontend
-```bash
-cd frontend
-npm start
-# or
-yarn start
+```env
+# Contract
+VITE_CONTRACT_ADDRESS=0x4A1058b3E8EDd3De25C7D35558176b102217EA22
+VITE_TOKEN_ADDRESS=0x4200000000000000000000000000000000000006
+
+# Filecoin/IPFS
+VITE_LIGHTHOUSE_API_KEY=your_lighthouse_api_key_here
+VITE_IPFS_GATEWAY=https://gateway.lighthouse.storage/ipfs/
+
+# Authentication
+VITE_PRIVY_APP_ID=your_privy_app_id_here
 ```
 
-### Running Smart Contract Tests
-```bash
-cd smartcontract
-scarb test
+## 🎯 How It Works
+
+1. **Ask Question**: User writes question → Content uploaded to Filecoin → CID stored on-chain
+2. **Submit Answer**: User writes answer → Content uploaded to Filecoin → CID stored on-chain
+3. **View Content**: CID retrieved from contract → Converted to IPFS URL → Content displayed
+4. **Stake Tokens**: Users stake tokens on questions to incentivize answers
+5. **Mark Correct**: Question author marks the correct answer, distributing staked tokens
+
+## 📊 Filecoin Storage Flow
+
+```
+User Input → Lighthouse Upload → Filecoin Storage → CID Generated
+                                                          ↓
+                                                    Stored On-Chain
+                                                          ↓
+                                              Retrieved & Displayed
 ```
 
-### Deploying Contracts in Starknet Devnet
-#### Linux:
-<ol>
- <li>Install starknet-devnet. <a href="https://0xspaceshard.github.io/starknet-devnet/docs/running/install">tutorial</a></li>
- <li>Install starknet foundry. <a href="https://foundry-rs.github.io/starknet-foundry/getting-started/installation.html#linux-and-macos">tutorial</a></li>
- <li>Runs starknet-devnet with seed 0: <code>starknet-devnet seed=0</code></li>
- <ol type="I">
-  <li><code>sncast --profile=devnet declare --contract-name=StarkOverflowToken</code></li>
-  <li><code>sncast --profile=devnet declare --contract-name=StarkOverflow</code></li>
- </ol>
- <li>Deploy the contracts <a href="https://docs.starknet.io/quick-start/devnet/#deploying_hellostarknet_locally">tutorial</a></li>
- <ol type="I">
-  <li><code>sncast --profile=devnet deploy --clash-hash=[StarkOverflowToken class hash] --salt=0 --arguments "'18', '100000000000000000000', [recipient address], [owner address], '1000000000000000000000'"</code></li>
-  <li><code>sncast --profile=devnet deploy --clash-hash=[StarkOverflow class hash] --salt=0 --arguments "[StarkOverflowToken address]"</code></li>
- </ol>
-</ol>
+## 🔗 Links
 
-#### Windows:
-<ol>
- <li>Install starknet-devnet via Docker. <a href="https://0xspaceshard.github.io/starknet-devnet/docs/running/docker">tutorial</a></li>
- <li>Install starknet foundry. <a href="https://foundry-rs.github.io/starknet-foundry/getting-started/installation.html#windows">tutorial</a></li>
- <li>Runs the container docker with starknet-devnet seed 0</li>
- <ol type="I">
-  <li><code>sncast --profile=devnet declare --contract-name=StarkOverflowToken</code></li>
-  <li><code>sncast --profile=devnet declare --contract-name=StarkOverflow</code></li>
- </ol>
- <li>Deploy the contracts <a href="https://docs.starknet.io/quick-start/devnet/#deploying_hellostarknet_locally">tutorial</a></li>
- <ol type="I">
-  <li><code>sncast --profile=devnet deploy --clash-hash=[StarkOverflowToken class hash] --salt=0 --arguments "'18', '100000000000000000000', [recipient address], [owner address], '1000000000000000000000'"</code></li>
-  <li><code>sncast --profile=devnet deploy --clash-hash=[StarkOverflow class hash] --salt=0 --constructor-calldata=[StarkOverflowToken address]</code></li>
- </ol>
-</ol>
+- **Repository**: https://github.com/MullerEsposito/starkoverflow-evm
+- **Contract**: Base Sepolia - `0x4A1058b3E8EDd3De25C7D35558176b102217EA22`
+- **Lighthouse**: https://files.lighthouse.storage/
 
-## 🛠️ Technologies Used
+## 📄 License
 
-- **React.js**
-- **Typescript**
-- **Styled-Components**
-- **Cairo** (Starknet Language)
-- **Scarb** (Package manager for Cairo projects)
-
-## 🤝 Contribution
-
-1. Fork the project
-2. Create a branch (`git checkout -b feature/MyFeature`)
-3. Commit your changes (`git commit -m 'Add my feature'`)
-4. Push to the branch (`git push origin feature/MyFeature`)
-5. Open a Pull Request to the development branch
-
-## 📜 License
-
-This project is licensed under the [MIT License](LICENSE).
-
-## 📧 Contact
-
-Müller Esposito Nunes  
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin)]([https://www.linkedin.com/in/seu-usuario](https://linkedin.com/in/mulleresposito))
-[![Email](https://img.shields.io/badge/Email-red?style=for-the-badge&logo=gmail&logoColor=white)](mailto:mulleresposito@hotmail.com)
-
-Community
-
-[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)]([https://t.me/seu_usuario](https://t.me/starkoverflow))
-
+MIT
