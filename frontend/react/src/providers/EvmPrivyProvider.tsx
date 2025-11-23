@@ -20,6 +20,10 @@ export function EvmPrivyProvider({ children }: EvmPrivyProviderProps) {
         },
         defaultChain: baseSepolia,
         supportedChains: [baseSepolia],
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+          requireUserPasswordOnCreate: false,
+        },
       }}
     >
       {children}
