@@ -1,5 +1,5 @@
 import { useState, ReactNode, useCallback } from 'react'
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useWriteContract, useSwitchChain } from 'wagmi'
 import { ContractContext } from './contract.context'
 import { formatters } from '@utils/formatters'
 import { contractAnswerToFrontend, contractQuestionToFrontend, contractForumToFrontend } from '@utils/contractTypeMapping'
@@ -20,7 +20,8 @@ interface ContractProviderProps {
 export function ContractProvider({ children }: ContractProviderProps) {
   const { isConnected, address, chainId } = useAccount()
   const publicClient = usePublicClient({ chainId: baseSepolia.id })
-  const { writeContractAsync, switchChainAsync } = useWriteContract()
+  const { writeContractAsync } = useWriteContract()
+  const { switchChainAsync } = useSwitchChain()
 
   const [questionState, setQuestionState] = useState<ContractState>({
     isLoading: false,
@@ -259,8 +260,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: 'allowance',
-        args: [address, contractAddress],
-        chainId: baseSepolia.id
+        args: [address, contractAddress]
       }) as bigint
 
       console.log(`ApproveToken: Current allowance: ${allowance}, Required: ${amount}`)
@@ -277,8 +277,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [contractAddress, amount],
-        chainId: baseSepolia.id
+        args: [contractAddress, amount]
       })
 
       console.log("ApproveToken: Approval transaction sent:", hash)
@@ -491,8 +490,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
           address: contractAddress,
           abi: ABI,
           functionName: 'askQuestion',
-          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount],
-          chainId: baseSepolia.id
+          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount]
         }),
         setQuestionState,
         "Failed to ask question"
