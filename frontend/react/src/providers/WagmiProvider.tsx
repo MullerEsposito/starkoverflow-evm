@@ -10,8 +10,10 @@ const queryClient = new QueryClient();
 const config = createConfig({
   chains: [baseSepolia],
   transports: {
-    [baseSepolia.id]: http(),
+    [baseSepolia.id]: http(import.meta.env.VITE_RPC_URL || 'https://sepolia.base.org'),
   },
+  // Increase polling frequency for faster updates
+  pollingInterval: 1_000,
 });
 
 interface WagmiProviderProps {

@@ -8,6 +8,7 @@ import { ERROR_MESSAGES } from './errors'
 import { ContractState, Question, Answer, Forum } from '@app-types/index'
 import { ContractQuestion, ContractAnswer, ContractForum } from '@app-types/contract-types'
 import StarkOverflowArtifact from '@app-types/StarkOverflow.json'
+import { baseSepolia } from 'viem/chains'
 
 // Define the ABI type
 const ABI = StarkOverflowArtifact.abi
@@ -17,9 +18,9 @@ interface ContractProviderProps {
 }
 
 export function ContractProvider({ children }: ContractProviderProps) {
-  const { isConnected, address } = useAccount()
-  const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
+  const { isConnected, address, chainId } = useAccount()
+  const publicClient = usePublicClient({ chainId: baseSepolia.id })
+  const { writeContractAsync, switchChainAsync } = useWriteContract()
 
   const [questionState, setQuestionState] = useState<ContractState>({
     isLoading: false,
@@ -83,6 +84,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
       return hash
     } catch (error) {
       const msg = error instanceof Error ? error.message : errorMessage
+      console.error("ExecuteTransaction Error:", error)
       setState({ isLoading: false, error: msg, transactionHash: null })
       return null
     }
@@ -217,6 +219,83 @@ export function ContractProvider({ children }: ContractProviderProps) {
     return !!hash
   }, [writeContractAsync, contractAddress, isConnected])
 
+  // Helper to approve token spending
+  const approveToken = async (amount: bigint, setState: (state: ContractState) => void): Promise<boolean> => {
+    if (!publicClient || !address) {
+      console.log("ApproveToken: PublicClient or Address missing")
+      return false
+    }
+
+    // Check Chain ID
+    if (chainId !== baseSepolia.id) {
+      try {
+        await switchChainAsync({ chainId: baseSepolia.id })
+      } catch (error) {
+        console.error("Failed to switch network", error)
+        return false
+      }
+    }
+
+    try {
+      const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS as `0x${string}`
+      console.log("ApproveToken: Checking allowance for", tokenAddress)
+
+      const erc20Abi = [{
+        name: 'allowance',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+        outputs: [{ name: '', type: 'uint256' }]
+      }, {
+        name: 'approve',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        outputs: [{ name: '', type: 'bool' }]
+      }]
+
+      // 1. Check Allowance
+      const allowance = await publicClient.readContract({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [address, contractAddress],
+        chainId: baseSepolia.id
+      }) as bigint
+
+      console.log(`ApproveToken: Current allowance: ${allowance}, Required: ${amount}`)
+
+      if (allowance >= amount) {
+        console.log("ApproveToken: Allowance sufficient, skipping approve")
+        return true
+      }
+
+      console.log("ApproveToken: Allowance insufficient, requesting approval...")
+
+      // 2. Approve
+      const hash = await writeContractAsync({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [contractAddress, amount],
+        chainId: baseSepolia.id
+      })
+
+      console.log("ApproveToken: Approval transaction sent:", hash)
+
+      // 3. Wait for confirmation
+      await publicClient.waitForTransactionReceipt({ hash })
+      console.log("ApproveToken: Approval confirmed")
+
+      return true
+    } catch (error) {
+      console.error("ApproveToken: Error", error)
+      const msg = error instanceof Error ? error.message : "Failed to approve tokens"
+      setState({ isLoading: false, error: msg, transactionHash: null })
+      return false
+    }
+  }
+
   // Add funds to question
   const addFundsToQuestion = useCallback(async (questionId: number, amount: bigint): Promise<boolean> => {
     if (!isConnected) {
@@ -227,23 +306,9 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setStakingState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      // Approve
-      const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS as `0x${string}`
-      const erc20Abi = [{
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
-        outputs: [{ name: '', type: 'bool' }]
-      }]
-
-      // 1. Approve
-      await writeContractAsync({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [contractAddress, amount]
-      })
+      // 1. Approve and wait
+      const approved = await approveToken(amount, setStakingState)
+      if (!approved) return false
 
       // 2. Stake
       const hash = await writeContractAsync({
@@ -257,10 +322,11 @@ export function ContractProvider({ children }: ContractProviderProps) {
       return true
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to add funds"
+      console.error("AddFunds Error:", error)
       setStakingState({ isLoading: false, error: msg, transactionHash: null })
       return false
     }
-  }, [writeContractAsync, contractAddress, isConnected])
+  }, [writeContractAsync, contractAddress, isConnected, publicClient])
 
   // Get total staked amount on question
   const getTotalStakedOnQuestion = useCallback(async (questionId: number): Promise<number> => {
@@ -400,27 +466,45 @@ export function ContractProvider({ children }: ContractProviderProps) {
 
   const askQuestion = useCallback(async (forumId: number, title: string, description: string, tags: string[], amount: bigint, repositoryUrl: string): Promise<string | null> => {
     try {
-      // Upload description to IPFS first
       setQuestionState({ isLoading: true, error: null, transactionHash: null })
+
+      // Check Chain ID (Double check before starting flow)
+      if (chainId !== baseSepolia.id) {
+        try {
+          await switchChainAsync({ chainId: baseSepolia.id })
+        } catch (error) {
+          setQuestionState({ isLoading: false, error: "Wrong Network", transactionHash: null })
+          return null
+        }
+      }
+
+      // 1. Approve tokens first
+      const approved = await approveToken(amount, setQuestionState)
+      if (!approved) return null
+
+      // 2. Upload description to IPFS
       const descriptionCid = await uploadText(description, `question-${Date.now()}.md`)
 
-      // Then send transaction with CID
+      // 3. Then send transaction with CID
       return executeTransaction(
         () => writeContractAsync({
           address: contractAddress,
           abi: ABI,
           functionName: 'askQuestion',
-          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount]
+          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount],
+          chainId: baseSepolia.id
         }),
         setQuestionState,
         "Failed to ask question"
       )
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Failed to upload question to IPFS"
+      const msg = error instanceof Error ? error.message : "Failed to ask question"
+      console.error("AskQuestion Error:", error)
+      window.alert(`Ask Question Error: ${msg}`)
       setQuestionState({ isLoading: false, error: msg, transactionHash: null })
       return null
     }
-  }, [writeContractAsync, contractAddress, isConnected])
+  }, [writeContractAsync, contractAddress, isConnected, publicClient])
 
   const submitAnswer = useCallback(async (questionId: number, description: string): Promise<string | null> => {
     try {
