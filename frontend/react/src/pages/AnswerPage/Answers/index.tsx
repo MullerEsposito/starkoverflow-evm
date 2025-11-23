@@ -2,19 +2,121 @@ import { CheckCircle, ThumbsDown, ThumbsUp } from "phosphor-react"
 import { UserAvatar } from "../styles"
 import { AnswerContent, AnswerDivider, AnswerFooter, AnswerHeader, AnswerItem, AnswersContainer, AnswersList, CorrectAnswerBadge, MarkCorrectButton, PaginationButton, PaginationContainer, SortingOptions, SortOption, VoteButton, VoteContainer, VoteCount } from "./styles"
 import * as React from "react"
-import { useContext, useState, Suspense } from "react"
+import { useContext, useState, Suspense, useEffect } from "react"
 
 import { shortenAddress } from "@utils/shortenAddress"
 
 import { AnswersContext } from "../hooks/useAnswers/answersContext"
 
-import type { Question } from "@app-types/index"
+import type { Question, Answer } from "@app-types/index"
 import { useWallet } from "@hooks/useWallet"
 import { useStatusMessage } from "@hooks/useStatusMessage"
 import { useContract } from "@hooks/useContract"
 
 const ReactMarkdown = React.lazy(() => import("react-markdown"))
 const remarkGfm = await import("remark-gfm").then((mod) => mod.default || mod)
+
+interface AnswerRowProps {
+  answer: Answer
+  isQuestionAuthor: boolean
+  questionIsOpen: boolean
+  handleVote: (answerId: string, direction: "up" | "down") => void
+  handleMarkCorrect: (answerId: string) => void
+}
+
+function AnswerRow({ answer, isQuestionAuthor, questionIsOpen, handleVote, handleMarkCorrect }: AnswerRowProps) {
+  const [content, setContent] = useState<string>("")
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      if (!answer.content) {
+        setContent("")
+        return
+      }
+
+      if (answer.content.startsWith("http")) {
+        try {
+          const response = await fetch(answer.content)
+          const contentType = response.headers.get("content-type")
+
+          if (contentType && contentType.startsWith("image/")) {
+            // If it's an image, render it as an image
+            setContent(`![Answer Image](${answer.content})`)
+          } else if (response.ok) {
+            const text = await response.text()
+            setContent(text)
+          } else {
+            setContent(answer.content)
+          }
+        } catch (error) {
+          console.error("Failed to fetch answer content:", error)
+          setContent(answer.content)
+        }
+      } else {
+        setContent(answer.content)
+      }
+    }
+
+    fetchContent()
+  }, [answer.content])
+
+  return (
+    <AnswerItem $isCorrect={answer.isCorrect}>
+      <AnswerHeader>
+        <UserAvatar
+          src={`https://avatars.dicebear.com/api/identicon/${answer.authorAddress}.svg`}
+          alt={answer.authorName}
+        />
+        <div>
+          <span>{answer.authorName}</span>
+          <small>{shortenAddress(answer.authorAddress)}</small>
+          <time>{answer.timestamp}</time>
+        </div>
+        {answer.isCorrect && (
+          <CorrectAnswerBadge>
+            <CheckCircle size={16} weight="fill" />
+            Correct Answer
+          </CorrectAnswerBadge>
+        )}
+      </AnswerHeader>
+
+      <AnswerContent>
+        <Suspense fallback={<p>Loading content...</p>}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              img: ({ ...props }) => (
+                <img
+                  src={props.src || "/placeholder.svg"}
+                  alt={props.alt || ""}
+                  style={{ maxWidth: "100%", borderRadius: "4px", margin: "8px 0" }}
+                />
+              ),
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </Suspense>
+      </AnswerContent>
+      <AnswerFooter>
+        <VoteContainer>
+          <VoteButton onClick={() => handleVote(answer.id, "up")}>
+            <ThumbsUp size={16} />
+          </VoteButton>
+          <VoteCount>{answer.votes}</VoteCount>
+          <VoteButton onClick={() => handleVote(answer.id, "down")}>
+            <ThumbsDown size={16} />
+          </VoteButton>
+        </VoteContainer>
+
+        {isQuestionAuthor && questionIsOpen && !answer.isCorrect && (
+          <MarkCorrectButton onClick={() => handleMarkCorrect(answer.id)}>Mark as Correct</MarkCorrectButton>
+        )}
+      </AnswerFooter>
+      <AnswerDivider />
+    </AnswerItem>
+  )
+}
 
 interface AnswersProps {
   question: Question
@@ -39,8 +141,6 @@ export function Answers({ question, setQuestion }: AnswersProps) {
       return a.timestamp.includes("Today") && !b.timestamp.includes("Today") ? -1 : 1
     }
   })
-
-
 
   const handleMarkCorrect = async (answerId: string) => {
     if (!isConnected) {
@@ -171,59 +271,14 @@ export function Answers({ question, setQuestion }: AnswersProps) {
           <p>No answers yet. Be the first to answer!</p>
         ) : (
           sortedAnswers.map((answer) => (
-            <AnswerItem key={answer.id} $isCorrect={answer.isCorrect}>
-              <AnswerHeader>
-                <UserAvatar
-                  src={`https://avatars.dicebear.com/api/identicon/${answer.authorAddress}.svg`}
-                  alt={answer.authorName}
-                />
-                <div>
-                  <span>{answer.authorName}</span>
-                  <small>{shortenAddress(answer.authorAddress)}</small>
-                  <time>{answer.timestamp}</time>
-                </div>                {answer.isCorrect && (
-                  <CorrectAnswerBadge>
-                    <CheckCircle size={16} weight="fill" />
-                    Correct Answer
-                  </CorrectAnswerBadge>
-                )}
-              </AnswerHeader>
-
-              <AnswerContent>
-                <Suspense fallback={<p>Carregando visualização...</p>}>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      img: ({ ...props }) => (
-                        <img
-                          src={props.src || "/placeholder.svg"}
-                          alt={props.alt || ""}
-                          style={{ maxWidth: "100%", borderRadius: "4px", margin: "8px 0" }}
-                        />
-                      ),
-                    }}
-                  >
-                    {answer.content}
-                  </ReactMarkdown>
-                </Suspense>
-              </AnswerContent>
-              <AnswerFooter>
-                <VoteContainer>
-                  <VoteButton onClick={() => handleVote(answer.id, "up")}>
-                    <ThumbsUp size={16} />
-                  </VoteButton>
-                  <VoteCount>{answer.votes}</VoteCount>
-                  <VoteButton onClick={() => handleVote(answer.id, "down")}>
-                    <ThumbsDown size={16} />
-                  </VoteButton>
-                </VoteContainer>
-
-                {isQuestionAuthor && question.isOpen && !answer.isCorrect && (
-                  <MarkCorrectButton onClick={() => handleMarkCorrect(answer.id)}>Mark as Correct</MarkCorrectButton>
-                )}
-              </AnswerFooter>
-              <AnswerDivider />
-            </AnswerItem>
+            <AnswerRow
+              key={answer.id}
+              answer={answer}
+              isQuestionAuthor={!!isQuestionAuthor}
+              questionIsOpen={question.isOpen}
+              handleVote={handleVote}
+              handleMarkCorrect={handleMarkCorrect}
+            />
           ))
         )}
       </AnswersList>

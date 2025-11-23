@@ -3,7 +3,7 @@ import { ActionButton, QuestionContainer, QuestionContent, QuestionFooter, Quest
 import { UserAvatar } from "../styles";
 
 import type { Question } from "@app-types/index";
-import React, { Suspense } from "react";
+import React, { Suspense, useState, useEffect } from "react";
 import { useStaking } from "../hooks/useStaking";
 
 const ReactMarkdown = React.lazy(() => import("react-markdown"))
@@ -16,6 +16,40 @@ interface QuestionProps {
 
 export function Question({ question }: QuestionProps) {
   const { setIsStakeModalOpen } = useStaking()
+  const [content, setContent] = useState<string>("")
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      if (!question.content) {
+        setContent("")
+        return
+      }
+
+      if (question.content.startsWith("http")) {
+        try {
+          const response = await fetch(question.content)
+          const contentType = response.headers.get("content-type")
+
+          if (contentType && contentType.startsWith("image/")) {
+            // If it's an image, render it as an image
+            setContent(`![Question Image](${question.content})`)
+          } else if (response.ok) {
+            const text = await response.text()
+            setContent(text)
+          } else {
+            setContent(question.content)
+          }
+        } catch (error) {
+          console.error("Failed to fetch question content:", error)
+          setContent(question.content)
+        }
+      } else {
+        setContent(question.content)
+      }
+    }
+
+    fetchContent()
+  }, [question.content])
 
   return (
     <QuestionContainer>
@@ -46,7 +80,7 @@ export function Question({ question }: QuestionProps) {
       </QuestionHeader>
 
       <QuestionContent>
-        <Suspense fallback={<p>Carregando visualização...</p>}>
+        <Suspense fallback={<p>Loading content...</p>}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -59,7 +93,7 @@ export function Question({ question }: QuestionProps) {
               ),
             }}
           >
-            {question.content}
+            {content}
           </ReactMarkdown>
         </Suspense>
       </QuestionContent>
