@@ -2,85 +2,62 @@ import { describe, it, expect } from 'vitest'
 import { formatters } from './formatters'
 
 describe('formatters', () => {
-  describe('truncateAddress', () => {
-    it('should truncate a valid address', () => {
+  describe('formatAddress', () => {
+    it('should format a valid address', () => {
       const address = '0x1234567890abcdef1234567890abcdef12345678'
-      const result = formatters.truncateAddress(address)
+      const result = formatters.formatAddress(address)
       expect(result).toBe('0x1234...5678')
     })
 
     it('should handle undefined', () => {
-      const result = formatters.truncateAddress(undefined as any)
-      expect(result).toBe(undefined)
-    })
-
-    it('should handle empty string', () => {
-      const result = formatters.truncateAddress('')
+      const result = formatters.formatAddress(undefined)
       expect(result).toBe('')
     })
 
-    it('should not truncate short addresses', () => {
-      const address = '0x1234'
-      const result = formatters.truncateAddress(address)
-      expect(result).toBe('0x1234')
+    it('should handle empty string', () => {
+      const result = formatters.formatAddress('')
+      expect(result).toBe('')
     })
   })
 
-  describe('bigIntToNumber', () => {
-    it('should convert bigint to number', () => {
-      const bigInt = 1000n
-      const result = formatters.bigIntToNumber(bigInt)
-      expect(result).toBe(1000)
+  describe('weiToEther', () => {
+    it('should convert wei to ether', () => {
+      const wei = 1500000000000000000n
+      const result = formatters.weiToEther(wei)
+      expect(result).toBe(1.5)
     })
 
-    it('should handle zero', () => {
-      const result = formatters.bigIntToNumber(0n)
-      expect(result).toBe(0)
-    })
-
-    it('should handle undefined', () => {
-      const result = formatters.bigIntToNumber(undefined as any)
-      expect(result).toBe(0)
+    it('should handle string input', () => {
+      const wei = '1000000000000000000'
+      const result = formatters.weiToEther(wei)
+      expect(result).toBe(1.0)
     })
   })
 
-  describe('bigIntToString', () => {
-    it('should convert bigint to string', () => {
-      const bigInt = 123456789n
-      const result = formatters.bigIntToString(bigInt)
-      expect(result).toBe('123456789')
-    })
-
-    it('should handle zero', () => {
-      const result = formatters.bigIntToString(0n)
-      expect(result).toBe('0')
-    })
-
-    it('should handle undefined', () => {
-      const result = formatters.bigIntToString(undefined as any)
-      expect(result).toBe('0')
-    })
-  })
-
-  describe('convertStringDecimalToWei', () => {
+  describe('toWei', () => {
     it('should convert decimal string to wei', () => {
-      const result = formatters.convertStringDecimalToWei('1.5')
+      const result = formatters.toWei('1.5')
       expect(result).toBe(1500000000000000000n)
     })
 
     it('should handle whole numbers', () => {
-      const result = formatters.convertStringDecimalToWei('10')
+      const result = formatters.toWei('10')
       expect(result).toBe(10000000000000000000n)
     })
 
     it('should handle zero', () => {
-      const result = formatters.convertStringDecimalToWei('0')
+      const result = formatters.toWei('0')
       expect(result).toBe(0n)
     })
+  })
 
-    it('should handle invalid input', () => {
-      const result = formatters.convertStringDecimalToWei('invalid')
-      expect(result).toBe(0n)
+  describe('isAddress', () => {
+    it('should return true for valid address', () => {
+      expect(formatters.isAddress('0x1234567890abcdef1234567890abcdef12345678')).toBe(true)
+    })
+
+    it('should return false for invalid address', () => {
+      expect(formatters.isAddress('invalid')).toBe(false)
     })
   })
 })

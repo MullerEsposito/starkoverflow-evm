@@ -1,129 +1,105 @@
-import { useRef, useEffect, useState } from "react";
-import { useAccount, useConnect, useDisconnect, Connector } from "@starknet-react/core";
-import { WALLET_LOGOS } from "./constant";
-import { AddressButton, ChevronIcon, CloseButton, ConnectButtonContainer, Dropdown, DropdownItem, InstallButton, InstallButtonsContainer, InstallRedirect, ModalContent, ModalHeader, ModalOverlay, ModalTitle, NoWalletsMessage, StyledButton, WalletButton, WalletIcon, WalletInfo, WalletList, WalletLogo, WalletName, WalletStatus } from "./style";
-import { useWallet } from "@hooks/useWallet";
-import { formatters } from "@utils/formatters";
-
-// Wallet installation links
-const WALLET_INSTALL_LINKS = {
-  argentX: "https://www.argent.xyz/argent-x/",
-  braavos: "https://braavos.app/"
-};
+import { usePrivy } from '@privy-io/react-auth';
+import { useAccount, useDisconnect } from 'wagmi';
+import { useEffect, useRef, useState } from 'react';
+import { PROVIDER_ICONS } from './constant';
+import { formatters } from '@utils/formatters';
+import {
+  AddressButton,
+  ChevronIcon,
+  Dropdown,
+  DropdownItem,
+  StyledButton,
+  WalletInfo,
+  WalletName,
+  WalletStatus,
+  UserAvatar,
+  DefaultAvatar
+} from './style';
 
 export function ConnectButton() {
-  const { connect, connectors } = useConnect();
-  const { isConnected, address } = useAccount();
+  const { address } = useAccount();
   const { disconnect } = useDisconnect();
-  const { isModalOpen, openConnectModal, closeConnectModal, isWalletDetected } = useWallet();
-
+  const { login, logout, authenticated, user } = usePrivy();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
+  // Fechar dropdown ao clicar fora
+  const handleClickOutside = (event: MouseEvent) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      setIsDropdownOpen(false);
     }
+  };
 
-    document.addEventListener("mousedown", handleClickOutside);
+  // Adicionar/remover listener para clique fora
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
-  // Handle wallet connection
-  const handleConnect = (connector: Connector) => {
-    connect({ connector });
-    closeConnectModal();
+  const handleConnect = () => {
+    if (authenticated) {
+      setIsDropdownOpen(!isDropdownOpen);
+    } else {
+      login();
+    }
   };
 
-  // Handle wallet disconnection
   const handleDisconnect = () => {
+    logout();
     disconnect();
     setIsDropdownOpen(false);
   };
 
+  const getUserInfo = () => {
+    if (!user) return { name: 'Connect Wallet', image: null }
+
+    if (user.google) {
+      console.log(`user.google`, user.google);
+
+      return {
+        name: user.google.name || user.google.email?.split('@')[0] || 'Google User',
+        image: (user.google as any).picture || null
+      }
+    }
+
+    if (user.wallet) {
+      return {
+        name: 'Wallet',
+        image: PROVIDER_ICONS.metaMask
+      }
+    }
+  }
+
+  const userInfo = getUserInfo()
+
   return (
-    <>
-      <ConnectButtonContainer ref={dropdownRef}>
-        {isConnected && address ? (
-          <>
-            <AddressButton data-cy="wallet-address-btn" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-              {formatters.truncateAddress(address)}
-              <ChevronIcon $isOpen={isDropdownOpen} />
-            </AddressButton>
-
-            <Dropdown $isOpen={isDropdownOpen}>
-              <DropdownItem onClick={handleDisconnect}>
-                Disconnect Wallet
-              </DropdownItem>
-            </Dropdown>
-          </>
-        ) : (
-          <StyledButton data-cy="connect-wallet-btn" onClick={openConnectModal}>
-            Connect Wallet
-          </StyledButton>
-        )}
-      </ConnectButtonContainer>
-
-      {/* Connect Wallet Modal */}
-      <ModalOverlay data-cy="wallet-modal" $isOpen={isModalOpen} onClick={(e) => {
-        if (e.target === e.currentTarget) closeConnectModal();
-      }}>
-        <ModalContent onClick={(e) => e.stopPropagation()}>
-          <ModalHeader>
-            <ModalTitle>Connect Wallet</ModalTitle>
-            <CloseButton onClick={closeConnectModal}>×</CloseButton>
-          </ModalHeader>
-
-          {isWalletDetected ? (
-            <WalletList>
-              {connectors.map((connector) => {
-                const isAvailable = connector.available();
-                return (
-                  <WalletButton
-                    key={connector.id}
-                    onClick={() => handleConnect(connector)}
-                    disabled={!isAvailable}
-                  >
-                    <WalletIcon src={typeof connector.icon === 'string' ? connector.icon : ""} alt={connector.name} />
-                    <WalletInfo>
-                      <WalletName>{connector.name}</WalletName>
-                      <WalletStatus>
-                        {isAvailable ? "Available" : "Not installed"}
-                      </WalletStatus>
-                    </WalletInfo>
-                  </WalletButton>
-                );
-              })}
-            </WalletList>
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
+      {authenticated ? (
+        <AddressButton onClick={handleConnect}>
+          {userInfo?.image ? (
+            <UserAvatar src={userInfo.image} alt={userInfo.name} />
           ) : (
-            <NoWalletsMessage>
-              <p>No StarkNet wallets detected in your browser.</p>
-              <p>Please install one of the following wallets to continue:</p>
-
-              <InstallButtonsContainer>
-                <InstallRedirect href={WALLET_INSTALL_LINKS.argentX} target="_blank" rel="noopener noreferrer">
-                  <InstallButton>
-                    <WalletLogo src={WALLET_LOGOS.argentX} alt="ArgentX Logo" />
-                    Install ArgentX
-                  </InstallButton>
-                </InstallRedirect>
-
-                <InstallRedirect href={WALLET_INSTALL_LINKS.braavos} target="_blank" rel="noopener noreferrer">
-                  <InstallButton>
-                    <WalletLogo src={WALLET_LOGOS.braavos} alt="Braavos Logo" />
-                    Install Braavos
-                  </InstallButton>
-                </InstallRedirect>
-              </InstallButtonsContainer>
-            </NoWalletsMessage>
+            <DefaultAvatar>
+              {userInfo?.name.charAt(0).toUpperCase()}
+            </DefaultAvatar>
           )}
-        </ModalContent>
-      </ModalOverlay>
-    </>
+          <WalletInfo>
+            <WalletName>{userInfo?.name}</WalletName>
+            <WalletStatus>{formatters.formatAddress(address || '')}</WalletStatus>
+          </WalletInfo>
+          <ChevronIcon $isOpen={isDropdownOpen} />
+        </AddressButton>
+      ) : (
+        <StyledButton onClick={handleConnect}>Connect Wallet</StyledButton>
+      )}
+
+      {isDropdownOpen && (
+        <Dropdown $isOpen={isDropdownOpen}>
+          <DropdownItem onClick={handleDisconnect}>Disconnect</DropdownItem>
+        </Dropdown>
+      )}
+    </div>
   );
 }

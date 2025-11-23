@@ -1,12 +1,15 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { App } from './App.tsx'
-import StarknetProvider from './providers/StarknetProvider.tsx'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+import EvmPrivyProvider from './providers/EvmPrivyProvider';
+import WagmiProvider from './providers/WagmiProvider';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StarknetProvider>
-      <App />
-    </StarknetProvider>
-  </StrictMode>,
-)
+    <WagmiProvider>
+      <EvmPrivyProvider>
+        <App />
+      </EvmPrivyProvider>
+    </WagmiProvider>
+  </StrictMode>
+);

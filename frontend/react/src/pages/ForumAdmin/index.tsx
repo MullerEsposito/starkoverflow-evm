@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useContract } from "@hooks/useContract";
 import { useWallet } from "@hooks/useWallet";
-import { useAccount } from "@starknet-react/core";
+
 import { CircleNotch, Warning } from "phosphor-react";
 import { Button, AlertMessage } from "./style";
 import { InputForm } from "@components/InputForm";
@@ -31,8 +31,7 @@ export function ForumAdmin() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [forum, setForum] = useState<Forum | null>(null);
 
-  const { isConnected } = useAccount();
-  const { openConnectModal } = useWallet();
+  const { isConnected, openConnectModal } = useWallet();
   const {
     createForum,
     checkIsOwner,

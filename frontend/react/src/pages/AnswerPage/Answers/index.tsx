@@ -3,7 +3,7 @@ import { UserAvatar } from "../styles"
 import { AnswerContent, AnswerDivider, AnswerFooter, AnswerHeader, AnswerItem, AnswersContainer, AnswersList, CorrectAnswerBadge, MarkCorrectButton, PaginationButton, PaginationContainer, SortingOptions, SortOption, VoteButton, VoteContainer, VoteCount } from "./styles"
 import * as React from "react"
 import { useContext, useState, Suspense } from "react"
-import { useAccount } from "@starknet-react/core"
+
 import { shortenAddress } from "@utils/shortenAddress"
 
 import { AnswersContext } from "../hooks/useAnswers/answersContext"
@@ -24,8 +24,8 @@ interface AnswersProps {
 export function Answers({ question, setQuestion }: AnswersProps) {
   const [sortBy, setSortBy] = useState<"votes" | "date">("votes")
   const [currentPage, setCurrentPage] = useState(1)
-  const { isConnected, address } = useAccount()
-  const { openConnectModal } = useWallet()
+  const { isConnected, address, openConnectModal } = useWallet()
+
   const { answers, setAnswers } = useContext(AnswersContext)
   const { setStatusMessage } = useStatusMessage()
   const { markAnswerAsCorrect } = useContract()
@@ -158,10 +158,10 @@ export function Answers({ question, setQuestion }: AnswersProps) {
     <AnswersContainer>
       <h2>Answers</h2>
       <SortingOptions>
-        <SortOption active={sortBy === "votes"} onClick={() => setSortBy("votes")}>
+        <SortOption $active={sortBy === "votes"} onClick={() => setSortBy("votes")}>
           Votes
         </SortOption>
-        <SortOption active={sortBy === "date"} onClick={() => setSortBy("date")}>
+        <SortOption $active={sortBy === "date"} onClick={() => setSortBy("date")}>
           Date
         </SortOption>
       </SortingOptions>

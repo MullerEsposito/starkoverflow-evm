@@ -1,19 +1,19 @@
 import { ThemeProvider } from "styled-components"
-import { GlobalStyle } from "./styles/global"
 import { BrowserRouter } from "react-router-dom"
-import { Router } from "./router"
-import { Header } from "./components/Header"
-import { darkTheme, lightTheme } from "./styles/themes"
-import { WalletDetector } from "./components/wallet-detector"
+import { lightTheme, darkTheme } from "./styles/themes"
 import { useState, useEffect } from "react"
-import { StatusMessageProvider } from "@hooks/useStatusMessage/statusMessage.provider"
-import { WalletProvider } from "@hooks/useWallet/wallet.provider"
-import { ContractProvider } from "@hooks/useContract/contract.provider"
+import { GlobalStyle } from "./styles/global"
+import { WalletProvider } from "./hooks/useWallet/wallet.provider"
 import { EnvironmentStatus } from "./components/EnvironmentStatus"
+import { ContractProvider } from "./hooks/useContract/contract.provider"
+import { Header } from "./components/Header"
+import { Router } from "./router"
+import { WalletDetector } from "./components/WalletDetector"
+import { WagmiProvider } from "./providers/WagmiProvider"
 
 export function App() {
-  const [theme, setTheme] = useState(darkTheme);  
-  
+  const [theme, setTheme] = useState(darkTheme);
+
   // Try to load preferred theme from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -31,20 +31,20 @@ export function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
-    <StatusMessageProvider>
-      <WalletProvider>
-        <ContractProvider>
-          <BrowserRouter>
-            <Header toggleTheme={toggleTheme}/>
-            <WalletDetector />
-            <Router />
-          </BrowserRouter>
-          <GlobalStyle />
-          <EnvironmentStatus />
-        </ContractProvider>
-      </WalletProvider>
-    </StatusMessageProvider>
-  </ThemeProvider>
+    <WagmiProvider>
+      <ThemeProvider theme={theme}>
+        <WalletProvider>
+          <ContractProvider>
+            <BrowserRouter>
+              <Header toggleTheme={toggleTheme} />
+              <WalletDetector />
+              <Router />
+            </BrowserRouter>
+            <GlobalStyle />
+            <EnvironmentStatus />
+          </ContractProvider>
+        </WalletProvider>
+      </ThemeProvider>
+    </WagmiProvider>
   )
 }

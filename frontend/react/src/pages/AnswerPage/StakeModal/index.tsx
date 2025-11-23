@@ -2,7 +2,6 @@
 
 import React, { useState } from "react"
 import { CurrencyDollar, X } from "phosphor-react"
-import { useAccount } from "@starknet-react/core"
 import {
   ModalOverlay,
   ModalContent,
@@ -23,7 +22,6 @@ import type { Question } from "@app-types/index"
 import { useStatusMessage } from "@hooks/useStatusMessage"
 import { useWallet } from "@hooks/useWallet"
 import { useContract } from "@hooks/useContract"
-import { cairo } from "starknet"
 import { formatters } from "@utils/formatters"
 
 interface StakeModalProps {
@@ -35,11 +33,9 @@ export function StakeModal({ question, setQuestion }: StakeModalProps) {
   const [amount, setAmount] = useState("")
   const [error, setError] = useState<string | null>(null)
 
-  const amountInWei = formatters.convertStringDecimalToWei(amount);
-  const scaledAmount = cairo.uint256(amountInWei);
+  const amountInWei = amount ? formatters.toWei(amount) : 0n
 
-  const { isConnected } = useAccount()
-  const { openConnectModal } = useWallet()
+  const { isConnected, openConnectModal } = useWallet()
   const { setStatusMessage } = useStatusMessage()
   const {
     isStakeModalOpen,
@@ -63,13 +59,13 @@ export function StakeModal({ question, setQuestion }: StakeModalProps) {
     setStatusMessage({ type: "info", message: "Processing stake transaction..." })
     clearStakingError()
 
-    if (!amount || Number(scaledAmount.low) <= 0) {
+    if (!amount || amountInWei <= 0n) {
       setError("Please enter a valid amount")
       return
     }
 
     try {
-      const success = await addFundsToQuestion(Number(question.id), scaledAmount)
+      const success = await addFundsToQuestion(Number(question.id), amountInWei)
 
       if (success) {
         // Fetch updated stake amount from contract

@@ -15,17 +15,17 @@ export const SortingOptions = styled.div`
   margin-bottom: 24px;
 `
 
-export const SortOption = styled.button<{ active: boolean }>`
+export const SortOption = styled.button<{ $active: boolean }>`
   background: none;
   border: none;
-  color: ${({ active, theme }) => (active ? "#7c3aed" : theme.textSecondary)};
-  font-weight: ${({ active }) => (active ? "600" : "400")};
+  color: ${({ $active, theme }) => ($active ? "#7c3aed" : theme.textSecondary)};
+  font-weight: ${({ $active }) => ($active ? "600" : "400")};
   cursor: pointer;
   padding: 4px 0;
-  border-bottom: 2px solid ${({ active }) => (active ? "#7c3aed" : "transparent")};
+  border-bottom: 2px solid ${({ $active }) => ($active ? "#7c3aed" : "transparent")};
   
   &:hover {
-    color: ${({ active, theme }) => (active ? "#7c3aed" : theme.text)};
+    color: ${({ $active, theme }) => ($active ? "#7c3aed" : theme.text)};
   }
 `
 

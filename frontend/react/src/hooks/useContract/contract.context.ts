@@ -1,11 +1,8 @@
 import { createContext } from 'react'
-import { StarknetTypedContract } from "@starknet-react/core"
-import { Question, Answer, Forum, StarkOverflowABI } from '@app-types/index'
-import { Uint256 } from '@app-types/contract-types'
-
+import { Question, Answer, Forum } from '@app-types/index'
 
 interface ContractContextType {
-  contract: StarknetTypedContract<typeof StarkOverflowABI> | undefined
+  contract: any | undefined
   contractReady: boolean
   isConnected: boolean | undefined
   address: string | undefined
@@ -44,11 +41,13 @@ interface ContractContextType {
   clearAnswersError: () => void
   markAnswerAsCorrect: (questionId: string, answerId: string) => Promise<boolean>
   getCorrectAnswer: (questionId: string) => Promise<string | null>
-  addFundsToQuestion: (questionId: number, amount: Uint256) => Promise<boolean>
+  addFundsToQuestion: (questionId: number, amount: bigint) => Promise<boolean>
   getTotalStakedOnQuestion: (questionId: number) => Promise<number>
   clearStakingError: () => void
   clearForumsError: () => void
   clearOwnerError: () => void
+  askQuestion: (forumId: number, title: string, description: string, tags: string[], amount: bigint, repositoryUrl: string) => Promise<string | null>
+  submitAnswer: (questionId: number, description: string) => Promise<string | null>
 }
 
 export const ContractContext = createContext<ContractContextType | undefined>(undefined)

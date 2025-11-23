@@ -1,12 +1,16 @@
-import { useState, ReactNode, useCallback, useMemo } from 'react'
-import { useAccount, useContract, useSendTransaction } from "@starknet-react/core"
-import { Contract, RpcProvider } from 'starknet'
+import { useState, ReactNode, useCallback } from 'react'
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
 import { ContractContext } from './contract.context'
 import { formatters } from '@utils/formatters'
 import { contractAnswerToFrontend, contractQuestionToFrontend, contractForumToFrontend } from '@utils/contractTypeMapping'
+import { uploadText } from '@utils/ipfsUpload'
 import { ERROR_MESSAGES } from './errors'
-import { ContractState, Question, Answer, Forum, StarkOverflowABI } from '@app-types/index'
-import { Question as ContractQuestion, Answer as ContractAnswer, ContractForum, Uint256 } from '@app-types/contract-types'
+import { ContractState, Question, Answer, Forum } from '@app-types/index'
+import { ContractQuestion, ContractAnswer, ContractForum } from '@app-types/contract-types'
+import StarkOverflowArtifact from '@app-types/StarkOverflow.json'
+
+// Define the ABI type
+const ABI = StarkOverflowArtifact.abi
 
 interface ContractProviderProps {
   children: ReactNode
@@ -14,6 +18,8 @@ interface ContractProviderProps {
 
 export function ContractProvider({ children }: ContractProviderProps) {
   const { isConnected, address } = useAccount()
+  const publicClient = usePublicClient()
+  const { writeContractAsync } = useWriteContract()
 
   const [questionState, setQuestionState] = useState<ContractState>({
     isLoading: false,
@@ -57,28 +63,30 @@ export function ContractProvider({ children }: ContractProviderProps) {
     transactionHash: null
   })
 
-  const { contract } = useContract<typeof StarkOverflowABI>({ abi: StarkOverflowABI, address: import.meta.env.VITE_CONTRACT_ADDRESS })
+  const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS as `0x${string}`
 
-  // Create a read-only contract instance that works without wallet connection
-  const readOnlyContract = useMemo(() => {
-    if (!import.meta.env.VITE_CONTRACT_ADDRESS) return null
-
-    try {
-      const provider = new RpcProvider({
-        nodeUrl: import.meta.env.VITE_RPC_URL ?? "https://starknet-sepolia.public.blastapi.io/rpc/v0_7"
-      })
-      return new Contract(StarkOverflowABI, import.meta.env.VITE_CONTRACT_ADDRESS, provider)
-    } catch (error) {
-      console.error('Error creating read-only contract:', error)
+  // Helper to handle transaction execution and state updates
+  const executeTransaction = async (
+    action: () => Promise<`0x${string}`>,
+    setState: (state: ContractState) => void,
+    errorMessage: string
+  ): Promise<string | null> => {
+    if (!isConnected) {
+      setState({ isLoading: false, error: "Wallet not connected", transactionHash: null })
       return null
     }
-  }, [])
 
-  // Use the appropriate contract instance based on the operation type
-  const getContractForReading = useCallback(() => readOnlyContract || contract, [readOnlyContract, contract])
-  const getContractForWriting = useCallback(() => contract, [contract])
-
-
+    setState({ isLoading: true, error: null, transactionHash: null })
+    try {
+      const hash = await action()
+      setState({ isLoading: false, error: null, transactionHash: hash })
+      return hash
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : errorMessage
+      setState({ isLoading: false, error: msg, transactionHash: null })
+      return null
+    }
+  }
 
   // Question functions
   const fetchQuestions = useCallback(async (forumId: string, page: number, pageSize: number): Promise<{
@@ -86,20 +94,21 @@ export function ContractProvider({ children }: ContractProviderProps) {
     totalQuestions: number,
     hasNextPage: boolean
   }> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance) {
+    if (!publicClient || !contractAddress) {
       setQuestionsState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return { questions: [], totalQuestions: 0, hasNextPage: false }
     }
 
     setQuestionsState({ isLoading: true, error: null, transactionHash: null })
     try {
-      const contractQuestionsResponse = await contractInstance.get_questions(BigInt(forumId), BigInt(pageSize), BigInt(page))
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'getQuestions',
+        args: [BigInt(forumId), BigInt(pageSize), BigInt(page)]
+      }) as [ContractQuestion[], bigint, boolean]
 
-      const contractQuestions = contractQuestionsResponse[0] as unknown as ContractQuestion[]
-      const totalQuestions = contractQuestionsResponse[1] as unknown as bigint
-      const hasNextPage = contractQuestionsResponse[2] as unknown as boolean
-
+      const [contractQuestions, totalQuestions, hasNextPage] = result
 
       const questions = contractQuestions.map(contractQuestion => contractQuestionToFrontend(contractQuestion))
 
@@ -110,11 +119,10 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setQuestionsState({ isLoading: false, error: errorMessage, transactionHash: null })
       return { questions: [], totalQuestions: 0, hasNextPage: false }
     }
-  }, [getContractForReading])
+  }, [publicClient, contractAddress])
 
   const fetchQuestion = useCallback(async (questionId: number): Promise<Question | null> => {
-    const contractInstance = await getContractForReading()
-    if (!contractInstance) {
+    if (!publicClient || !contractAddress) {
       setQuestionState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return null
     }
@@ -122,20 +130,28 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setQuestionState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      /* const contractQuestion = await (contractInstance.get_question(BigInt(questionId))) as unknown as ContractQuestion */
-
       const [contractQuestion, totalStaked] = await Promise.all([
-        (await contractInstance.get_question(BigInt(questionId))) as unknown as ContractQuestion,
-        (await contractInstance.get_total_staked_on_question(BigInt(questionId)) as Promise<bigint>)
+        publicClient.readContract({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'getQuestion',
+          args: [BigInt(questionId)]
+        }) as Promise<ContractQuestion>,
+        publicClient.readContract({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'getTotalStakedOnQuestion',
+          args: [BigInt(questionId)]
+        }) as Promise<bigint>
       ])
 
-      if (!contractQuestion.description || !contractQuestion.id) {
+      if (!contractQuestion.descriptionCid || !contractQuestion.id) {
         setQuestionState({ isLoading: false, error: ERROR_MESSAGES.QUESTION_NOT_FOUND, transactionHash: null })
         return null
       }
 
       const question = contractQuestionToFrontend(contractQuestion)
-      question.stakeAmount = formatters.convertWeiToDecimal(Number(totalStaked))
+      question.stakeAmount = formatters.weiToEther(totalStaked)
       setQuestionState({ isLoading: false, error: null, transactionHash: null })
       return question
     } catch (error) {
@@ -143,11 +159,10 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setQuestionState({ isLoading: false, error: errorMessage, transactionHash: null })
       return null
     }
-  }, [getContractForReading])
+  }, [publicClient, contractAddress])
 
   const fetchAnswers = useCallback(async (questionId: number): Promise<Answer[]> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance) {
+    if (!publicClient || !contractAddress) {
       setAnswersState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return []
     }
@@ -155,10 +170,22 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setAnswersState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      const [contractAnswers, correctAnswerId] = await Promise.all([
-        (await contractInstance.get_answers(BigInt(questionId))) as unknown as ContractAnswer[],
-        contractInstance.get_correct_answer(BigInt(questionId)).catch(() => BigInt(0))
+      const [result, correctAnswerId] = await Promise.all([
+        publicClient.readContract({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'getAnswers',
+          args: [BigInt(questionId), BigInt(100), BigInt(1)] // Assuming pagination, fetching first 100
+        }) as Promise<[ContractAnswer[], bigint, boolean]>,
+        publicClient.readContract({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'getCorrectAnswer',
+          args: [BigInt(questionId)]
+        }).catch(() => BigInt(0)) as Promise<bigint>
       ])
+
+      const [contractAnswers] = result
 
       const answers = contractAnswers.map((contractAnswer) =>
         contractAnswerToFrontend(
@@ -174,142 +201,106 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setAnswersState({ isLoading: false, error: errorMessage, transactionHash: null })
       return []
     }
-  }, [getContractForReading])
-
-  const { sendAsync: markAnswerAsCorrectSendAsync } = useSendTransaction({
-    calls: undefined,
-  })
-
-  const { sendAsync: addFundsToQuestionSendAsync } = useSendTransaction({
-    calls: undefined,
-  })
+  }, [publicClient, contractAddress])
 
   const markAnswerAsCorrect = useCallback(async (questionId: string, answerId: string): Promise<boolean> => {
-    const contractInstance = getContractForWriting()
-    if (!contractInstance || !isConnected) {
-      setMarkCorrectState({
-        isLoading: false,
-        error: "Contract not initialized or wallet not connected",
-        transactionHash: null
-      })
-      return false
-    }
-
-    const transaction = contractInstance && questionId && answerId
-      ? [contractInstance.populate("mark_answer_as_correct", [BigInt(Number(questionId)), BigInt(Number(answerId))])]
-      : undefined
-
-    setMarkCorrectState({ isLoading: true, error: null, transactionHash: null })
-
-    try {
-      setMarkCorrectState({
-        isLoading: false,
-        error: null,
-        transactionHash: null
-      })
-
-      const response = await markAnswerAsCorrectSendAsync(transaction)
-
-      if (response) {
-        setMarkCorrectState({
-          isLoading: false,
-          error: null,
-          transactionHash: response.transaction_hash || null
-        })
-      }
-
-      return true
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to mark answer as correct"
-      setMarkCorrectState({ isLoading: false, error: errorMessage, transactionHash: null })
-      return false
-    }
-  }, [getContractForWriting, isConnected, markAnswerAsCorrectSendAsync])
+    const hash = await executeTransaction(
+      () => writeContractAsync({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'markAnswerAsCorrect',
+        args: [BigInt(questionId), BigInt(answerId)]
+      }),
+      setMarkCorrectState,
+      "Failed to mark answer as correct"
+    )
+    return !!hash
+  }, [writeContractAsync, contractAddress, isConnected])
 
   // Add funds to question
-  const addFundsToQuestion = useCallback(async (questionId: number, amount: Uint256): Promise<boolean> => {
-    const contractInstance = await getContractForWriting()
-    if (!contractInstance || !isConnected) {
-      setStakingState({
-        isLoading: false,
-        error: "Contract not initialized or wallet not connected",
-        transactionHash: null
-      })
+  const addFundsToQuestion = useCallback(async (questionId: number, amount: bigint): Promise<boolean> => {
+    if (!isConnected) {
+      setStakingState({ isLoading: false, error: "Wallet not connected", transactionHash: null })
       return false
     }
 
     setStakingState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      // first approve the amount , then add funds to question
-      const transaction = [
-        {
-          contractAddress: import.meta.env.VITE_TOKEN_ADDRESS,
-          entrypoint: "approve",
-          calldata: [contractInstance.address, amount.low, amount.high],
-        },
-        contractInstance.populate("stake_on_question", [
-          BigInt(questionId),
-          amount
-        ])]
+      // Approve
+      const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS as `0x${string}`
+      const erc20Abi = [{
+        name: 'approve',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        outputs: [{ name: '', type: 'bool' }]
+      }]
 
-      const response = await addFundsToQuestionSendAsync(transaction)
+      // 1. Approve
+      await writeContractAsync({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [contractAddress, amount]
+      })
 
-      if (response) {
-        setStakingState({
-          isLoading: false,
-          error: null,
-          transactionHash: response.transaction_hash || null
-        })
-        return true
-      }
+      // 2. Stake
+      const hash = await writeContractAsync({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'stakeOnQuestion',
+        args: [BigInt(questionId), amount]
+      })
 
-      return false
+      setStakingState({ isLoading: false, error: null, transactionHash: hash })
+      return true
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to add funds to question"
-      setStakingState({ isLoading: false, error: errorMessage, transactionHash: null })
+      const msg = error instanceof Error ? error.message : "Failed to add funds"
+      setStakingState({ isLoading: false, error: msg, transactionHash: null })
       return false
     }
-  }, [getContractForWriting, isConnected, addFundsToQuestionSendAsync])
+  }, [writeContractAsync, contractAddress, isConnected])
 
   // Get total staked amount on question
   const getTotalStakedOnQuestion = useCallback(async (questionId: number): Promise<number> => {
-    const contractInstance = await getContractForReading()
-    if (!contractInstance) {
-      return 0
-    }
+    if (!publicClient || !contractAddress) return 0
 
     try {
-      const result = await contractInstance.get_total_staked_on_question(BigInt(questionId)) as bigint
-      console.log("getTotalStakedOnQuestion", formatters.convertWeiToDecimal(Number(result)))
-      return formatters.convertWeiToDecimal(Number(result))
-      // return formatters.bigIntToNumber(Number(result))
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'getTotalStakedOnQuestion',
+        args: [BigInt(questionId)]
+      }) as bigint
+      return formatters.weiToEther(result)
     } catch (error) {
       console.error("Error fetching total staked amount:", error)
       return 0
     }
-  }, [getContractForReading])
+  }, [publicClient, contractAddress])
 
   // Check if an answer has already been marked as correct for a question
   const getCorrectAnswer = useCallback(async (questionId: string): Promise<string | null> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance) {
-      return null
-    }
+    if (!publicClient || !contractAddress) return null
 
     try {
-      const result = await contractInstance.get_correct_answer(BigInt(Number(questionId))) as bigint
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'getCorrectAnswer',
+        args: [BigInt(questionId)]
+      }) as bigint
       return result && result !== BigInt(0) ? result.toString() : null
     } catch (error) {
       console.error("Error fetching correct answer:", error)
       return null
     }
-  }, [getContractForReading])
+  }, [publicClient, contractAddress])
 
   // Forum functions
   const fetchForums = useCallback(async (): Promise<Forum[]> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance) {
+    if (!publicClient || !contractAddress) {
       setForumsState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return []
     }
@@ -317,7 +308,14 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setForumsState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      const contractForums = await contractInstance.get_forums() as unknown as ContractForum[]
+      const result = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'getForums',
+        args: [BigInt(100), BigInt(1)] // Pagination args
+      }) as [ContractForum[], bigint, boolean]
+
+      const [contractForums] = result
 
       const forums = contractForums.map(contractForum => contractForumToFrontend(contractForum))
 
@@ -328,11 +326,10 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setForumsState({ isLoading: false, error: errorMessage, transactionHash: null })
       return []
     }
-  }, [getContractForReading])
+  }, [publicClient, contractAddress])
 
   const fetchForum = useCallback(async (forumId: string): Promise<Forum | null> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance) {
+    if (!publicClient || !contractAddress) {
       setForumsState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return null
     }
@@ -340,7 +337,12 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setForumsState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      const contractForum = await contractInstance.get_forum(BigInt(forumId)) as unknown as ContractForum
+      const contractForum = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'getForum',
+        args: [BigInt(forumId)]
+      }) as ContractForum
 
       if (!contractForum.id) {
         setForumsState({ isLoading: false, error: "Forum not found", transactionHash: null })
@@ -355,125 +357,97 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setForumsState({ isLoading: false, error: errorMessage, transactionHash: null })
       return null
     }
-  }, [getContractForReading])
-
-  const { sendAsync: createForumSendAsync } = useSendTransaction({
-    calls: undefined,
-  })
-
-  const { sendAsync: updateForumSendAsync } = useSendTransaction({
-    calls: undefined,
-  })
-
-  const { sendAsync: deleteForumSendAsync } = useSendTransaction({
-    calls: undefined,
-  })
+  }, [publicClient, contractAddress])
 
   const createForum = useCallback(async (name: string, iconUrl: string): Promise<string | null> => {
-    const contractInstance = getContractForWriting()
-    if (!contractInstance || !isConnected) {
-      setForumsState({
-        isLoading: false,
-        error: "Contract not initialized or wallet not connected",
-        transactionHash: null
-      })
-      return null
-    }
-
-    setForumsState({ isLoading: true, error: null, transactionHash: null })
-
-    try {
-      const transaction = [contractInstance.populate("create_forum", [name, iconUrl])]
-      const response = await createForumSendAsync(transaction)
-
-      if (response) {
-        setForumsState({
-          isLoading: false,
-          error: null,
-          transactionHash: response.transaction_hash || null
-        })
-        return response.transaction_hash || null
-      }
-
-      return null
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to create forum"
-      setForumsState({ isLoading: false, error: errorMessage, transactionHash: null })
-      return null
-    }
-  }, [getContractForWriting, isConnected, createForumSendAsync])
+    return executeTransaction(
+      () => writeContractAsync({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'createForum',
+        args: [name, iconUrl]
+      }),
+      setForumsState,
+      "Failed to create forum"
+    )
+  }, [writeContractAsync, contractAddress, isConnected])
 
   const updateForum = useCallback(async (forumId: string, name: string, iconUrl: string): Promise<string | null> => {
-    const contractInstance = getContractForWriting()
-    if (!contractInstance || !isConnected) {
-      setForumsState({
-        isLoading: false,
-        error: "Contract not initialized or wallet not connected",
-        transactionHash: null
-      })
-      return null
-    }
-
-    setForumsState({ isLoading: true, error: null, transactionHash: null })
-
-    try {
-      const transaction = [contractInstance.populate("update_forum", [BigInt(forumId), name, iconUrl])]
-      const response = await updateForumSendAsync(transaction)
-
-      if (response) {
-        setForumsState({
-          isLoading: false,
-          error: null,
-          transactionHash: response.transaction_hash || null
-        })
-        return response.transaction_hash || null
-      }
-
-      return null
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to update forum"
-      setForumsState({ isLoading: false, error: errorMessage, transactionHash: null })
-      return null
-    }
-  }, [getContractForWriting, isConnected, updateForumSendAsync])
+    return executeTransaction(
+      () => writeContractAsync({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'updateForum',
+        args: [BigInt(forumId), name, iconUrl]
+      }),
+      setForumsState,
+      "Failed to update forum"
+    )
+  }, [writeContractAsync, contractAddress, isConnected])
 
   const deleteForum = useCallback(async (forumId: string): Promise<string | null> => {
-    const contractInstance = getContractForWriting()
-    if (!contractInstance || !isConnected) {
-      setForumsState({
-        isLoading: false,
-        error: "Contract not initialized or wallet not connected",
-        transactionHash: null
-      })
-      return null
-    }
+    return executeTransaction(
+      () => writeContractAsync({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'deleteForum',
+        args: [BigInt(forumId)]
+      }),
+      setForumsState,
+      "Failed to delete forum"
+    )
+  }, [writeContractAsync, contractAddress, isConnected])
 
-    setForumsState({ isLoading: true, error: null, transactionHash: null })
-
+  const askQuestion = useCallback(async (forumId: number, title: string, description: string, tags: string[], amount: bigint, repositoryUrl: string): Promise<string | null> => {
     try {
-      const transaction = [contractInstance.populate("delete_forum", [BigInt(forumId)])]
-      const response = await deleteForumSendAsync(transaction)
+      // Upload description to IPFS first
+      setQuestionState({ isLoading: true, error: null, transactionHash: null })
+      const descriptionCid = await uploadText(description, `question-${Date.now()}.md`)
 
-      if (response) {
-        setForumsState({
-          isLoading: false,
-          error: null,
-          transactionHash: response.transaction_hash || null
-        })
-        return response.transaction_hash || null
-      }
-
-      return null
+      // Then send transaction with CID
+      return executeTransaction(
+        () => writeContractAsync({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'askQuestion',
+          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount]
+        }),
+        setQuestionState,
+        "Failed to ask question"
+      )
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to delete forum"
-      setForumsState({ isLoading: false, error: errorMessage, transactionHash: null })
+      const msg = error instanceof Error ? error.message : "Failed to upload question to IPFS"
+      setQuestionState({ isLoading: false, error: msg, transactionHash: null })
       return null
     }
-  }, [getContractForWriting, isConnected, deleteForumSendAsync])
+  }, [writeContractAsync, contractAddress, isConnected])
+
+  const submitAnswer = useCallback(async (questionId: number, description: string): Promise<string | null> => {
+    try {
+      // Upload answer content to IPFS first
+      setAnswersState({ isLoading: true, error: null, transactionHash: null })
+      const contentCid = await uploadText(description, `answer-${Date.now()}.md`)
+
+      // Then send transaction with CID
+      return executeTransaction(
+        () => writeContractAsync({
+          address: contractAddress,
+          abi: ABI,
+          functionName: 'submitAnswer',
+          args: [BigInt(questionId), contentCid]
+        }),
+        setAnswersState,
+        "Failed to submit answer"
+      )
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to upload answer to IPFS"
+      setAnswersState({ isLoading: false, error: msg, transactionHash: null })
+      return null
+    }
+  }, [writeContractAsync, contractAddress, isConnected])
 
   const checkIsOwner = useCallback(async (): Promise<boolean> => {
-    const contractInstance = getContractForReading()
-    if (!contractInstance || !address) {
+    if (!publicClient || !contractAddress || !address) {
       setOwnerState({ isLoading: false, error: ERROR_MESSAGES.CONTRACT_NOT_INITIALIZED, transactionHash: null })
       return false
     }
@@ -481,8 +455,12 @@ export function ContractProvider({ children }: ContractProviderProps) {
     setOwnerState({ isLoading: true, error: null, transactionHash: null })
 
     try {
-      const ownerAddressBigInt = await contractInstance.owner() as bigint
-      const ownerAddress = formatters.bigIntToAddress(ownerAddressBigInt)
+      const ownerAddress = await publicClient.readContract({
+        address: contractAddress,
+        abi: ABI,
+        functionName: 'owner',
+      }) as string
+
       const isOwner = ownerAddress.toLowerCase() === address.toLowerCase()
 
       setOwnerState({ isLoading: false, error: null, transactionHash: null })
@@ -492,7 +470,7 @@ export function ContractProvider({ children }: ContractProviderProps) {
       setOwnerState({ isLoading: false, error: errorMessage, transactionHash: null })
       return false
     }
-  }, [getContractForReading, address])
+  }, [publicClient, contractAddress, address])
 
   const clearQuestionError = () => setQuestionState(prev => ({ ...prev, error: null }))
   const clearAnswersError = () => setAnswersState(prev => ({ ...prev, error: null }))
@@ -502,8 +480,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
 
   return (
     <ContractContext.Provider value={{
-      contract,
-      contractReady: !!(readOnlyContract || contract),
+      contract: null,
+      contractReady: !!publicClient,
       isConnected,
       address,
       questionsLoading: questionsState.isLoading,
@@ -537,9 +515,11 @@ export function ContractProvider({ children }: ContractProviderProps) {
       getTotalStakedOnQuestion,
       clearStakingError,
       clearForumsError,
-      clearOwnerError
+      clearOwnerError,
+      askQuestion,
+      submitAnswer
     }}>
       {children}
     </ContractContext.Provider>
   )
-} 
+}

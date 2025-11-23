@@ -5,15 +5,15 @@ import { useState, useEffect } from "react"
 import { PaperPlaneRight, Link as LinkIcon, Tag, CurrencyDollar, Buildings } from "phosphor-react"
 import { Container, Form, Button, TransactionStatus } from "./style"
 import { NavLink, useNavigate, useParams } from "react-router-dom"
-import { useAccount, useSendTransaction } from "@starknet-react/core"
+
 import { InputForm } from "../../components/InputForm"
 import { EditorForm } from "./EditorForm"
 import { TagInput } from "../../components/TagInput"
 import { useWallet } from "@hooks/useWallet"
 import { useContract } from "@hooks/useContract"
 import { shortenAddress } from "@utils/shortenAddress"
-import { cairo } from "starknet"
 import { formatters } from "@utils/formatters"
+
 import { validateEnvironment, getEnvironmentDebugInfo } from "@utils/environment"
 import { Forum } from "@app-types/index"
 
@@ -29,10 +29,11 @@ export function QuestionPage() {
   const navigate = useNavigate()
   const params = useParams<{ name: string }>()
   const forumName = params.name || ""
-  const { isConnected } = useAccount()
-  const { openConnectModal } = useWallet()
-  const { contract, contractReady, fetchForum } = useContract();
+  const { isConnected, openConnectModal } = useWallet()
+  const { contractReady, fetchForum, askQuestion, questionLoading, questionError } = useContract();
+
   const [forum, setForum] = useState<Forum | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
 
   // Validate environment variables on component mount
   useEffect(() => {
@@ -52,29 +53,8 @@ export function QuestionPage() {
     loadForum()
   }, [fetchForum, forumName])
 
-  const amountInWei = formatters.convertStringDecimalToWei(amount);
-  const scaledAmount = cairo.uint256(amountInWei);
-
-  // Get token address safely
-  const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS
-
-  const { sendAsync: askQuestion, isPending: isTransactionPending, data: transactionData, error: transactionError } = useSendTransaction({
-    calls: contract && contractReady && tokenAddress && description && amount && Number(scaledAmount.low) > 0 && title && forum?.id
-      ? [{
-        contractAddress: tokenAddress,
-        entrypoint: "approve",
-        calldata: [contract.address, scaledAmount.low, scaledAmount.high],
-      },
-      contract.populate("ask_question", [
-        BigInt(forum.id),
-        title,
-        description,
-        repository,
-        tags, // Send tags array directly
-        scaledAmount
-      ])]
-      : undefined,
-  });
+  const amountInWei = amount ? formatters.toWei(amount) : 0n;
+  const amountInWeiNumber = Number(amountInWei) || 0;
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -104,9 +84,24 @@ export function QuestionPage() {
       openConnectModal()
       return
     }
+
+    if (!forum) {
+      setErrors({ general: "Forum not found" })
+      return
+    }
+
     try {
-      const result = await askQuestion()
-      if (result.transaction_hash) {
+      const hash = await askQuestion(
+        Number(forum.id),
+        title,
+        description,
+        tags,
+        amountInWei,
+        repository
+      )
+
+      if (hash) {
+        setTxHash(hash)
         setTimeout(() => {
           navigate(`/forum/${forumName}`)
         }, 2000)
@@ -116,31 +111,36 @@ export function QuestionPage() {
     }
   }
 
-  // Show environment error state
   if (envError) {
     return (
       <Container>
-        <div style={{
-          padding: "20px",
-          textAlign: "center",
-          backgroundColor: "#f8d7da",
-          color: "#721c24",
-          borderRadius: "5px",
-          border: "1px solid #f5c6cb",
-          margin: "20px 0"
-        }}>
+        <div
+          style={{
+            padding: "20px",
+            textAlign: "center",
+            backgroundColor: "#f8d7da",
+            color: "#721c24",
+            borderRadius: "5px",
+            border: "1px solid #f5c6cb",
+            margin: "20px 0",
+          }}
+        >
           <h3>Configuration Error</h3>
           <p style={{ margin: "10px 0" }}>{envError}</p>
           <details style={{ marginTop: "15px", textAlign: "left" }}>
             <summary style={{ cursor: "pointer", fontWeight: "bold" }}>Debug Information</summary>
             <div style={{ marginTop: "10px", fontFamily: "monospace", fontSize: "0.9em" }}>
               {Object.entries(getEnvironmentDebugInfo()).map(([key, value]) => (
-                <div key={key}>{key}: {value}</div>
+                <div key={key}>
+                  {key}: {value}
+                </div>
               ))}
             </div>
           </details>
           <div style={{ marginTop: "15px" }}>
-            <p>Please ensure your <code>.env</code> file exists and contains the required variables.</p>
+            <p>
+              Please ensure your <code>.env</code> file exists and contains the required variables.
+            </p>
           </div>
         </div>
       </Container>
@@ -152,14 +152,16 @@ export function QuestionPage() {
       <h2>Create Question</h2>
       <Form onSubmit={handleSubmit}>
         {errors.general && (
-          <div style={{
-            backgroundColor: "#f8d7da",
-            color: "#721c24",
-            padding: "10px",
-            borderRadius: "5px",
-            margin: "10px 0",
-            border: "1px solid #f5c6cb"
-          }}>
+          <div
+            style={{
+              backgroundColor: "#f8d7da",
+              color: "#721c24",
+              padding: "10px",
+              borderRadius: "5px",
+              margin: "10px 0",
+              border: "1px solid #f5c6cb",
+            }}
+          >
             {errors.general}
           </div>
         )}
@@ -178,6 +180,7 @@ export function QuestionPage() {
             <Buildings size={20} />
           </InputForm>
         )}
+
         <InputForm
           id="title"
           label="Title"
@@ -187,7 +190,9 @@ export function QuestionPage() {
           validateForm={validateForm}
           setValue={setTitle}
         />
-        <InputForm id="amount"
+
+        <InputForm
+          id="amount"
           label="Amount to Stake"
           tooltipText="The amount you're willing to pay for a solution"
           placeholder="Amount"
@@ -198,6 +203,7 @@ export function QuestionPage() {
         >
           <CurrencyDollar size={20} />
         </InputForm>
+
         <EditorForm
           id="description"
           value={description}
@@ -205,7 +211,9 @@ export function QuestionPage() {
           setValue={setDescription}
           validateForm={validateForm}
         />
-        <InputForm id="repository"
+
+        <InputForm
+          id="repository"
           label="Repository Link (Optional)"
           tooltipText="Link to a GitHub repository or code sample"
           placeholder="http://github.com/username/repo"
@@ -237,16 +245,24 @@ export function QuestionPage() {
               Discard
             </Button>
           </NavLink>
-          <Button variant="publish" type="submit" disabled={isTransactionPending || scaledAmount.low === 0n || !contractReady}>
-            {isTransactionPending ? "Publishing..." : "Publish"}
-            {!isTransactionPending && <PaperPlaneRight size={20} />}
+          <Button
+            variant="publish"
+            type="submit"
+            disabled={questionLoading || amountInWeiNumber === 0 || !contractReady}
+          >
+            {questionLoading ? "Publishing..." : "Publish"}
+            {!questionLoading && <PaperPlaneRight size={20} />}
           </Button>
         </div>
-        {(isTransactionPending || transactionData || transactionError) && (
-          <TransactionStatus status={(isTransactionPending) ? "processing" : (transactionData) ? "success" : "error"}>
-            {isTransactionPending && "Processing transaction..."}
-            {transactionData && `Transaction processed successfully! Tx: ${shortenAddress(String(transactionData?.transaction_hash))}`}
-            {transactionError && `Transaction failed: ${(transactionError)?.message}`}
+
+        {(questionLoading || txHash || questionError) && (
+          <TransactionStatus
+            status={questionLoading ? "processing" : txHash ? "success" : "error"}
+          >
+            {questionLoading && "Processing transaction..."}
+            {txHash &&
+              `Transaction processed successfully! Tx: ${shortenAddress(txHash)}`}
+            {questionError && `Transaction failed: ${questionError}`}
           </TransactionStatus>
         )}
       </Form>

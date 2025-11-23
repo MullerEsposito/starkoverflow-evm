@@ -348,3 +348,25 @@ export const WalletButton = styled.button`
     box-shadow: none;
   }
 `;
+
+export const UserAvatar = styled.img`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 8px;
+`;
+
+export const DefaultAvatar = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #676FFF;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  font-weight: bold;
+  font-size: 14px;
+`;

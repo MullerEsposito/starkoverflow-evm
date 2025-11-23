@@ -1,6 +1,7 @@
 import { formatters } from "./formatters"
 import { Question, Answer, Forum } from "@app-types/index"
-import { Question as ContractQuestion, Answer as ContractAnswer, ContractForum } from "../types/contract-types"
+import { ContractQuestion, ContractAnswer, ContractForum } from "../types/contract-types"
+import { cidToUrl } from "./ipfs"
 
 
 const generateMockTimestamp = (): string => {
@@ -39,39 +40,38 @@ const generateMockAuthorName = (address: string): string => {
 }
 
 export const contractQuestionToFrontend = (contractQuestion: ContractQuestion): Question => {
-  const authorAddress = formatters.bigIntToAddress(contractQuestion.author)
-  const status = formatters.formatStatus(contractQuestion.status)
+  const authorAddress = contractQuestion.author
+  const status = contractQuestion.status === 0 ? "Open" : "Resolved"
   const authorName = generateMockAuthorName(authorAddress)
-  const weiValue = formatters.bigIntToNumber(contractQuestion.amount)
-  const decimalValue = formatters.convertWeiToDecimal(weiValue)
+  const decimalValue = formatters.weiToEther(contractQuestion.amount)
 
   return {
     id: contractQuestion.id.toString(),
     title: contractQuestion.title,
-    content: contractQuestion.description,
+    content: cidToUrl(contractQuestion.descriptionCid),
     authorAddress: authorAddress,
     authorAvatar: `https://api.dicebear.com/9.x/avataaars/svg?seed=${authorAddress}`,
     authorName,
     timestamp: generateMockTimestamp(),
     stakeAmount: decimalValue,
-    tags: contractQuestion?.tags || [],
-    repositoryUrl: generateMockRepository(),
+    tags: contractQuestion.tags || [],
+    repositoryUrl: contractQuestion.repositoryUrl || generateMockRepository(),
     isOpen: status === "Open",
   }
 }
 
 export const contractAnswerToFrontend = (contractAnswer: ContractAnswer, isCorrect = false): Answer => {
-  const authorAddress = formatters.bigIntToAddress(contractAnswer.author)
+  const authorAddress = contractAnswer.author
   const authorName = generateMockAuthorName(authorAddress)
 
   return {
     id: contractAnswer.id.toString(),
     authorAddress: authorAddress,
     authorName,
-    content: contractAnswer.description,
+    content: cidToUrl(contractAnswer.descriptionCid),
     timestamp: generateMockTimestamp(),
     isCorrect,
-    votes: Math.floor(Math.random() * 10), // Random votes for now
+    votes: Number(contractAnswer.upvotes) - Number(contractAnswer.downvotes),
   }
 }
 
@@ -79,8 +79,8 @@ export const contractForumToFrontend = (contractForum: ContractForum): Forum => 
   return {
     id: contractForum.id.toString(),
     name: contractForum.name,
-    icon_url: contractForum.icon_url,
-    amount: formatters.convertWeiToDecimal(Number(contractForum.amount)),
-    total_questions: Number(contractForum.total_questions),
+    icon_url: cidToUrl(contractForum.iconCid),
+    amount: formatters.weiToEther(contractForum.amount),
+    total_questions: Number(contractForum.totalQuestions),
   }
 }
