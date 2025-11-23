@@ -119,17 +119,19 @@ async function main() {
     }
     console.log();
 
-    // Test 3: Create Forums
+    // Test 3: Create Forums on Base
     console.log("📁 Test 3: Create Forums on Base");
     try {
         const forumNames = ["Base DeFi", "Base NFTs", "Base Gaming"];
+        // Using IPFS Logo CID for testing real image rendering
+        const realImageCid = "QmZTR5bcpQD7cFgTorqxZDYaew1Wqgfbd2ud9QqGPAkK2V";
 
         for (const name of forumNames) {
             try {
                 console.log(`   Creating forum: ${name}...`);
-                const tx = await starkOverflow.createForum(name, `Qm${name.replace(/\s/g, "")}IconCid`);
+                const tx = await starkOverflow.createForum(name, realImageCid);
                 await tx.wait();
-                console.log(`   ✅ Created forum: ${name}`);
+                console.log(`   ✅ Created forum: ${name} (Icon: ${realImageCid})`);
             } catch (e: any) {
                 console.log(`   ⚠️  Forum creation note: ${e.message.substring(0, 100)}...`);
             }
@@ -166,12 +168,15 @@ async function main() {
             const forumId = forums[0].id;
             console.log(`   Asking question in Forum ${forumId}...`);
 
+            // Using IPFS Logo CID for content as well to test image rendering
+            const realContentCid = "QmZTR5bcpQD7cFgTorqxZDYaew1Wqgfbd2ud9QqGPAkK2V";
+
             // DEBUG: Gas Estimation
             try {
                 const gasEstimate = await starkOverflow.askQuestion.estimateGas(
                     forumId,
                     `Base Question ${Date.now()}: How to use WETH?`,
-                    `QmBaseQuestionCid`,
+                    realContentCid,
                     `https://github.com/base/example`,
                     ["base", "weth"],
                     stakeAmount
@@ -184,7 +189,7 @@ async function main() {
             const tx = await starkOverflow.askQuestion(
                 forumId,
                 `Base Question ${Date.now()}: How to use WETH?`,
-                `QmBaseQuestionCid`,
+                realContentCid,
                 `https://github.com/base/example`,
                 ["base", "weth"],
                 stakeAmount
