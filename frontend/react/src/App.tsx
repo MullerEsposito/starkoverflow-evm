@@ -10,6 +10,7 @@ import { Header } from "./components/Header"
 import { Router } from "./router"
 import { WalletDetector } from "./components/WalletDetector"
 import { WagmiProvider } from "./providers/WagmiProvider"
+import { StatusMessageProvider } from "./hooks/useStatusMessage"
 
 export function App() {
   const [theme, setTheme] = useState(darkTheme);
@@ -32,19 +33,21 @@ export function App() {
 
   return (
     <WagmiProvider>
-      <ThemeProvider theme={theme}>
-        <WalletProvider>
-          <ContractProvider>
-            <BrowserRouter>
-              <Header toggleTheme={toggleTheme} />
-              <WalletDetector />
-              <Router />
-            </BrowserRouter>
-            <GlobalStyle />
-            <EnvironmentStatus />
-          </ContractProvider>
-        </WalletProvider>
-      </ThemeProvider>
+      <StatusMessageProvider>
+        <ThemeProvider theme={theme}>
+          <WalletProvider>
+            <ContractProvider>
+              <BrowserRouter>
+                <Header toggleTheme={toggleTheme} />
+                <WalletDetector />
+                <Router />
+              </BrowserRouter>
+              <GlobalStyle />
+              <EnvironmentStatus />
+            </ContractProvider>
+          </WalletProvider>
+        </ThemeProvider>
+      </StatusMessageProvider>
     </WagmiProvider>
   )
 }

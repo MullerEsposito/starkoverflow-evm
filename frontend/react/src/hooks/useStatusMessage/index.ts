@@ -9,3 +9,5 @@ export function useStatusMessage() {
 
   return context
 }
+
+export { StatusMessageProvider } from "./statusMessage.provider"

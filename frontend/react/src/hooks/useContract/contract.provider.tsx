@@ -260,7 +260,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: 'allowance',
-        args: [address, contractAddress]
+        args: [address, contractAddress],
+        chainId: baseSepolia.id
       }) as bigint
 
       console.log(`ApproveToken: Current allowance: ${allowance}, Required: ${amount}`)
@@ -277,7 +278,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [contractAddress, amount]
+        args: [contractAddress, amount],
+        chainId: baseSepolia.id
       })
 
       console.log("ApproveToken: Approval transaction sent:", hash)
@@ -314,7 +316,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
         address: contractAddress,
         abi: ABI,
         functionName: 'stakeOnQuestion',
-        args: [BigInt(questionId), amount]
+        args: [BigInt(questionId), amount],
+        chainId: baseSepolia.id
       })
 
       setStakingState({ isLoading: false, error: null, transactionHash: hash })
@@ -490,7 +493,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
           address: contractAddress,
           abi: ABI,
           functionName: 'askQuestion',
-          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount]
+          args: [BigInt(forumId), title, descriptionCid, repositoryUrl, tags, amount],
+          chainId: baseSepolia.id
         }),
         setQuestionState,
         "Failed to ask question"
@@ -498,7 +502,6 @@ export function ContractProvider({ children }: ContractProviderProps) {
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to ask question"
       console.error("AskQuestion Error:", error)
-      window.alert(`Ask Question Error: ${msg}`)
       setQuestionState({ isLoading: false, error: msg, transactionHash: null })
       return null
     }
@@ -516,7 +519,8 @@ export function ContractProvider({ children }: ContractProviderProps) {
           address: contractAddress,
           abi: ABI,
           functionName: 'submitAnswer',
-          args: [BigInt(questionId), contentCid]
+          args: [BigInt(questionId), contentCid],
+          chainId: baseSepolia.id
         }),
         setAnswersState,
         "Failed to submit answer"
