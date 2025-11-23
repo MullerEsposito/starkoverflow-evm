@@ -96,33 +96,6 @@ export async function uploadFile(file: File): Promise<string> {
 }
 
 /**
- * Get upload status from Filecoin
- * @param cid - IPFS CID to check
- * @returns Upload status information
- */
-export async function getFilecoinStatus(cid: string) {
-    try {
-        if (!LIGHTHOUSE_API_KEY) {
-            throw new Error('Lighthouse API key not configured')
-        }
-
-        const status = await lighthouse.getUploads(LIGHTHOUSE_API_KEY)
-        const upload = status.data.fileList.find((file: any) => file.cid === cid)
-
-        return {
-            found: !!upload,
-            fileName: upload?.fileName,
-            mimeType: upload?.mimeType,
-            fileSize: upload?.fileSize,
-            uploadedAt: upload?.createdAt
-        }
-    } catch (error) {
-        console.error('Error getting Filecoin status:', error)
-        return { found: false, error: error instanceof Error ? error.message : 'Unknown error' }
-    }
-}
-
-/**
  * Check if Lighthouse is configured
  */
 export function isLighthouseConfigured(): boolean {
